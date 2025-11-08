@@ -46,22 +46,31 @@ if uploaded_file:
         after = len(df)
         st.success(f"Removed {before - after} duplicate rows.")
 
-    # --- 4️⃣ Missing Values Overview ---
-    st.write("### ⚠️ Missing Value Summary")
-    null_counts = df.isnull().sum()
-    st.dataframe(null_counts[null_counts > 0])
-
     # --- 5️⃣ Data Type Conversion ---
     if st.button("Convert Data Types Automatically"):
         st.info("⏳ Converting column data types...")
         df = EDA.data_type_conversion(df)
         st.success("✅ Data type conversion complete!")
 
+    # --- 4️⃣ Missing Values Overview ---
+    st.write("### ⚠️ Missing Value Summary")
+    null_counts = df.isnull().sum()
+    st.dataframe(null_counts[null_counts > 0])
+
     # --- 6️⃣ Fill Missing Values ---
     if st.button("Fill Missing Values Automatically"):
         st.info("🧠 Filling missing values using intelligent logic...")
         df = EDA.fill_missing_values(df)
         st.success("✅ Missing values filled successfully!")
+
+    # --- 2️⃣ Data Overview ---
+    with st.expander("📊 Data Overview"):
+        buffer = io.StringIO()
+        df.info(buf=buffer)
+        s = "\n".join(buffer)
+        st.text(s)
+        st.write("### Summary Statistics")
+        st.dataframe(df.describe(include='all'))
 
     # --- 7️⃣ Final Output ---
     st.write("### 🧾 Cleaned Data Sample")
