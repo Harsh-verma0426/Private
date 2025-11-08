@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
-from Automated_EDA import EDA  # Import your class
+from Automated_EDA import EDA  # Import your class 
 
 st.set_page_config(page_title="Automated EDA Tool", layout="wide")
  
