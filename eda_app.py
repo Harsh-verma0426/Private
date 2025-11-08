@@ -45,7 +45,7 @@ if uploaded_file:
         df = df.drop_duplicates()
         after = len(df)
         st.success(f"Removed {before - after} duplicate rows.")
-
+    
     # --- 5️⃣ Data Type Conversion ---
     if st.button("Convert Data Types Automatically"):
         st.info("⏳ Converting column data types...")
