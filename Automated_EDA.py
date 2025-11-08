@@ -114,7 +114,6 @@ class EDA:
                 elif pd.api.types.is_datetime64_any_dtype(df[col]):
                     fill_value = df[col].mode()[0]
                     df[col].fillna(fill_value, inplace=True)
-                    df[col] = df[col].dt.strftime("%d-%m-%y")
                     print(f"Filled missing values in datetime column '{col}' with mode: {fill_value}.")
 
                 elif pd.api.types.is_categorical_dtype(df[col]) or pd.api.types.is_object_dtype(df[col]):
