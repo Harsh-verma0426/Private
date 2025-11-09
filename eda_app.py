@@ -181,52 +181,55 @@ if uploaded_file:
         }))
 
     with st.expander("📊 Two-Column Relationship Analysis", expanded=True):
-        st.write("Compare relationships between two columns — numeric, categorical, or datetime.")
 
-        # Filter useful columns
+        st.write("Compare two columns to understand their relationship.")
+
         useful_cols = EDA.get_useful_columns(df)
 
         if not useful_cols:
-            st.warning("⚠️ No suitable columns found for relationship analysis.")
+            st.info("No useful columns available for comparison.")
         else:
             col1, col2 = st.columns(2)
             with col1:
-                x_col = st.selectbox("Select first column (X-axis)", useful_cols, key="x_col")
+                x_col = st.selectbox("Select X-axis column", useful_cols, key="x_col")
             with col2:
-                y_col = st.selectbox("Select second column (Y-axis)", useful_cols, key="y_col")
+                y_col = st.selectbox("Select Y-axis column", useful_cols, key="y_col")
 
-            if x_col and y_col:
+            if x_col == y_col:
+                st.warning("⚠️ Please select two **different** columns to compare.")
+            else:
                 result = EDA.prepare_bivariate_data(df, x_col, y_col)
 
-                st.markdown(f"### 🧭 Insight")
-                st.info(result["summary"])
-
-                # --- Plot depending on type ---
-                if result["plot_type"] == "scatter":
-                    st.write(f"### 📈 Scatter Plot — `{x_col}` vs `{y_col}`")
-                    fig, ax = plt.subplots(figsize=(8, 5))
-                    sns.scatterplot(data=result["data"], x=x_col, y=y_col, ax=ax, color="royalblue")
-                    st.pyplot(fig)
-
-                elif result["plot_type"] == "bar":
-                    st.write(f"### 📊 Bar Chart — Average `{y_col}` by `{x_col}`")
-                    fig, ax = plt.subplots(figsize=(9, 5))
-                    sns.barplot(data=result["data"], x=x_col, y=f"Mean {y_col}", ax=ax, palette="viridis")
-                    plt.xticks(rotation=45)
-                    st.pyplot(fig)
-
-                elif result["plot_type"] == "line":
-                    st.write(f"### 📉 Line Chart — Trend of `{y_col}` over `{x_col}`")
-                    fig, ax = plt.subplots(figsize=(9, 5))
-                    sns.lineplot(data=result["data"], x=x_col, y=y_col, ax=ax, color="tomato")
-                    st.pyplot(fig)
-
-                elif result["plot_type"] == "grouped_bar":
-                    st.write(f"### 🪣 Grouped Frequency Plot — `{x_col}` × `{y_col}`")
-                    st.bar_chart(result["data"])
-
+                if result["plot_type"] == "unsupported" or result["data"] is None or len(result["data"]) == 0:
+                    st.info("No meaningful relationship found for this column pair. Try a different combination.")
                 else:
-                    st.warning("⚠️ Unsupported column combination or empty data.")
+                    # show insight text
+                    st.info(result["summary"])
+
+                    # Render charts safely
+                    try:
+                        if result["plot_type"] == "scatter":
+                            fig, ax = plt.subplots()
+                            sns.scatterplot(data=result["data"], x=x_col, y=y_col, ax=ax)
+                            st.pyplot(fig)
+
+                        elif result["plot_type"] == "bar":
+                            fig, ax = plt.subplots(figsize=(8,4))
+                            sns.barplot(data=result["data"], x=x_col, y=f"Mean {y_col}", ax=ax)
+                            plt.xticks(rotation=45)
+                            st.pyplot(fig)
+
+                        elif result["plot_type"] == "line":
+                            fig, ax = plt.subplots()
+                            sns.lineplot(data=result["data"], x=x_col, y=y_col, ax=ax)
+                            st.pyplot(fig)
+
+                        elif result["plot_type"] == "grouped_bar":
+                            st.bar_chart(result["data"])
+
+                    except Exception:
+                        st.info("Plot not supported for this selection. Try another pair.")
+
 
     # --- Download ---
     csv = df.to_csv(index=False).encode('utf-8')
