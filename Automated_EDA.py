@@ -79,30 +79,59 @@ class EDA:
     @staticmethod
     def fill_missing_values(df: pd.DataFrame, writer=print):
         for col in df.columns:
-            if df[col].isnull().sum() > 0:
-                if pd.api.types.is_numeric_dtype(df[col]):
-                    skewness = df[col].skew()
-                    if abs(skewness) < 0.5:
-                        fill_value = df[col].mean()
-                        writer(f"Filled missing values in numeric column '{col}' with mean: {fill_value}.")
-                    else:
-                        fill_value = df[col].median()
-                        writer(f"Filled missing values in numeric column '{col}' with median: {fill_value}.")
-                    df[col].fillna(fill_value, inplace=True)
+            missing_count = df[col].isnull().sum()
 
-                elif pd.api.types.is_datetime64_any_dtype(df[col]):
-                    mode_series = df[col].mode()
-                    if not mode_series.empty:
-                        fill_value = mode_series[0]
-                        df[col].fillna(fill_value, inplace=True)
-                        writer(f"Filled missing values in datetime column '{col}' with mode: {fill_value}.")
-                    # keep as datetime dtype — don’t convert to string
+            # Skip columns with no missing values
+            if missing_count == 0:
+                continue
 
-                elif pd.api.types.is_categorical_dtype(df[col]) or pd.api.types.is_object_dtype(df[col]):
-                    mode_series = df[col].mode()
-                    fill_value = mode_series[0] if not mode_series.empty else "N/A"
-                    df[col].fillna(fill_value, inplace=True)
-                    writer(f"Filled missing values in categorical column '{col}' with mode: {fill_value}.")
+            # --- Numeric Columns ---
+            if pd.api.types.is_numeric_dtype(df[col]):
+                skewness = df[col].skew()
+                if abs(skewness) < 0.5:
+                    fill_value = df[col].mean()
+                    writer(f"Filled missing values in numeric column '{col}' with mean: {fill_value:.4f}.")
+                else:
+                    fill_value = df[col].median()
+                    writer(f"Filled missing values in numeric column '{col}' with median: {fill_value:.4f}.")
+                df[col].fillna(fill_value, inplace=True)
+
+            # --- Datetime Columns ---
+            elif pd.api.types.is_datetime64_any_dtype(df[col]) or "date" in col.lower() or "time" in col.lower():
+                # Step 1: Force datetime dtype first
+                df[col] = pd.to_datetime(df[col], errors="coerce", dayfirst=True)
+
+                # Step 2: Compute fill value (mode or median date)
+                mode_series = df[col].mode()
+                if not mode_series.empty:
+                    fill_value = mode_series[0]
+                else:
+                    fill_value = df[col].dropna().median()
+
+                # Step 3: Fill missing safely
+                df[col].fillna(fill_value, inplace=True)
+
+                # Step 4: Reconfirm dtype (ensures no object conversion)
+                df[col] = pd.to_datetime(df[col], errors="coerce", dayfirst=True)
+
+                writer(f"Filled missing datetime values in '{col}' with {fill_value.strftime('%d-%m-%Y')}.")
+
+            # --- Categorical or Object Columns ---
+            elif pd.api.types.is_categorical_dtype(df[col]) or pd.api.types.is_object_dtype(df[col]):
+                mode_series = df[col].mode()
+                fill_value = mode_series[0] if not mode_series.empty else "N/A"
+                df[col].fillna(fill_value, inplace=True)
+                writer(f"Filled missing values in categorical column '{col}' with mode: {fill_value}.")
+
+            # --- Fallback (other uncommon dtypes) ---
+            else:
+                writer(f"⚠️ Skipped column '{col}' (unsupported dtype: {df[col].dtype})")
+
+        # Post-validation: force any lingering datetime-looking objects into datetime
+        for col in df.columns:
+            if "date" in col.lower() or "time" in col.lower():
+                df[col] = pd.to_datetime(df[col], errors="coerce", dayfirst=True)
 
         return df
+
 

@@ -84,6 +84,32 @@ if uploaded_file:
     st.write("### Cleaned Data Sample")
     st.dataframe(df.head(20))
 
+    # --- Data Overview ---
+    with st.expander("Data Overview"):
+        st.subheader("Dataset Information")
+
+        # Create DataFrame similar to df.info() output
+        info_df = pd.DataFrame({
+            "Column": df.columns,
+            "Non-Null Count": [df[col].count() for col in df.columns],
+            "Dtype": [df[col].dtype for col in df.columns]
+        })
+
+        # Highlight missing values
+        def highlight_missing(val):
+            return 'background-color: #ffcccc' if val < len(df) else ''
+
+        styled_info = info_df.style.applymap(highlight_missing, subset=['Non-Null Count'])
+        st.dataframe(styled_info, use_container_width=True)
+
+        # Show basic stats
+        st.subheader("Statistical Summary")
+        st.dataframe(df.describe(include='all'), use_container_width=True)
+
+        # Optional: Show sample rows
+        st.subheader("Sample Rows")
+        st.dataframe(df.head(), use_container_width=True)
+
     # --- Correlation Heatmap ---
     st.write("### Correlation Heatmap")
     with st.expander("MAP"):
@@ -95,39 +121,72 @@ if uploaded_file:
     # --- EDA Section ---
     st.write("## 🔍 Exploratory Data Analysis")
 
-    # 1️⃣ Column selection
-    col = st.selectbox("Select a column to visualize", df.columns)
+    # 1️⃣ Filter out useless columns (IDs, constants, etc.)
+    useful_cols = [
+        col for col in df.columns
+        if not col.lower().startswith("unnamed")
+        and df[col].nunique() > 1                     # remove constant cols
+        and df[col].nunique() < len(df) * 0.9         # remove mostly-unique ID-like cols
+    ]
 
-    # 2️⃣ Sampling (for large datasets)
-    sample_df = df.sample(min(len(df), 10000), random_state=42)
-
-    # 3️⃣ Numeric column visualization
-    if pd.api.types.is_numeric_dtype(df[col]):
-        st.write(f"### 📊 Distribution of `{col}` (sample of {len(sample_df)} rows)")
-        fig, ax = plt.subplots(figsize=(8, 5))
-        sns.histplot(sample_df[col], bins=30, kde=True, ax=ax, color="skyblue")
-        st.pyplot(fig)
-
-        st.write("### 🧮 Boxplot (to see outliers)")
-        fig, ax = plt.subplots(figsize=(6, 3))
-        sns.boxplot(x=sample_df[col], color="orange", ax=ax)
-        st.pyplot(fig)
-
-    # 4️⃣ Categorical column visualization
-    elif pd.api.types.is_object_dtype(df[col]) or pd.api.types.is_categorical_dtype(df[col]):
-        st.write(f"### 📊 Frequency of top categories in `{col}`")
-        counts = sample_df[col].value_counts().head(20)
-        st.bar_chart(counts)
-
-    # 5️⃣ Datetime column visualization
-    elif pd.api.types.is_datetime64_any_dtype(df[col]):
-        st.write(f"### 🗓️ Trend over time for `{col}`")
-        df[col] = pd.to_datetime(df[col], errors='coerce')
-        date_counts = df[col].value_counts().sort_index()
-        st.line_chart(date_counts)
-
+    if not useful_cols:
+        st.warning("⚠️ No suitable columns found for visualization.")
     else:
-        st.warning("⚠️ This column type is not supported for visualization yet.")
+        # 2️⃣ Let user pick which data type to explore
+        type_choice = st.radio("Select column type to explore:", ["Numeric", "Categorical", "Datetime"])
+
+        # 3️⃣ Filter columns by selected type
+        if type_choice == "Numeric":
+            filtered_cols = [col for col in useful_cols if pd.api.types.is_numeric_dtype(df[col])]
+        elif type_choice == "Categorical":
+            filtered_cols = [col for col in useful_cols if pd.api.types.is_object_dtype(df[col]) or pd.api.types.is_categorical_dtype(df[col])]
+        else:  # Datetime
+            filtered_cols = [col for col in useful_cols if pd.api.types.is_datetime64_any_dtype(df[col])]
+
+        # 4️⃣ Handle if there are no columns of that type
+        if not filtered_cols:
+            st.warning(f"⚠️ No {type_choice.lower()} columns found in this dataset.")
+        else:
+            col = st.selectbox(f"Select a {type_choice.lower()} column to visualize", filtered_cols)
+
+            # 5️⃣ Sample for large datasets to prevent lag
+            sample_df = df.sample(min(len(df), 10000), random_state=42)
+
+            # --- Numeric columns ---
+            if pd.api.types.is_numeric_dtype(df[col]):
+                st.write(f"### 📊 Distribution of `{col}` (sample of {len(sample_df)} rows)")
+                fig, ax = plt.subplots(figsize=(8, 5))
+                sns.histplot(sample_df[col], bins=30, kde=True, ax=ax, color="skyblue")
+                st.pyplot(fig)
+
+                st.write("### 🧮 Boxplot (to see outliers)")
+                fig, ax = plt.subplots(figsize=(6, 3))
+                sns.boxplot(x=sample_df[col], color="orange", ax=ax)
+                st.pyplot(fig)
+
+            # --- Categorical columns ---
+            elif pd.api.types.is_object_dtype(df[col]) or pd.api.types.is_categorical_dtype(df[col]):
+                st.write(f"### 📊 Frequency of top categories in `{col}`")
+                counts = sample_df[col].value_counts().head(20)
+                st.bar_chart(counts)
+
+            # --- Datetime columns ---
+            elif pd.api.types.is_datetime64_any_dtype(df[col]):
+                st.write(f"### 🗓️ Trend over time for `{col}`")
+
+                # Work on a temporary copy to avoid overwriting original df
+                temp_col = pd.to_datetime(df[col], errors='coerce')
+                date_counts = temp_col.value_counts().sort_index()
+
+                # Convert to DataFrame so Streamlit recognizes it properly
+                trend_df = date_counts.reset_index()
+                trend_df.columns = [col, "Count"]
+
+                st.line_chart(trend_df, x=col, y="Count")
+
+            else:
+                st.warning("⚠️ This column type is not supported for visualization yet.")
+
 
     # --- Download ---
     csv = df.to_csv(index=False).encode('utf-8')
