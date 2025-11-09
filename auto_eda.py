@@ -55,9 +55,9 @@ class EDA:
     @staticmethod
     def get_useful_columns(df: pd.DataFrame, missing_threshold: float = 0.9, id_threshold: float = 0.9):
         """
-        Filters out useless columns:
+        Filters out useless columns for visualization:
         - Columns starting with 'Unnamed'
-        - Columns with only one unique value
+        - Columns with one unique value (constants)
         - Columns with too many unique values (likely IDs)
         - Columns with too many missing values
         """
@@ -68,11 +68,11 @@ class EDA:
 
             if col.lower().startswith("unnamed"):
                 continue
-            if nunique <= 1:  # constant
+            if nunique <= 1:
                 continue
-            if nunique > len(df) * id_threshold:  # ID-like
+            if nunique > len(df) * id_threshold:
                 continue
-            if missing_ratio > missing_threshold:  # too many NaNs
+            if missing_ratio > missing_threshold:
                 continue
 
             useful_cols.append(col)
@@ -80,32 +80,45 @@ class EDA:
         return useful_cols
 
     @staticmethod
-    def prepare_bivariate_data(df: pd.DataFrame, x_col: str, y_col: str):
-        """Prepare data and suggest plot type for two-column relationship."""
+    def prepare_bivariate_data(df: pd.DataFrame, x_col: str, y_col: str, sample_limit=10000):
+        """
+        Prepare data and suggest plot type for two-column relationship.
+        Returns a dict with:
+        - 'plot_type': str
+        - 'data': pd.DataFrame
+        - 'summary': str (description or insight)
+        """
         if x_col not in df.columns or y_col not in df.columns:
-            return {"plot_type": "unsupported", "data": None}
+            return {"plot_type": "unsupported", "data": None, "summary": "Invalid columns selected."}
 
         data = df[[x_col, y_col]].dropna()
+        if len(data) > sample_limit:
+            data = data.sample(sample_limit, random_state=42)
 
-        # Numeric vs Numeric → Scatter
+        # Numeric vs Numeric → Scatter + Correlation
         if pd.api.types.is_numeric_dtype(df[x_col]) and pd.api.types.is_numeric_dtype(df[y_col]):
-            return {"plot_type": "scatter", "data": data}
+            corr = data[x_col].corr(data[y_col])
+            summary = f"Both `{x_col}` and `{y_col}` are numeric. Correlation coefficient: **{corr:.2f}**"
+            return {"plot_type": "scatter", "data": data, "summary": summary}
 
-        # Categorical vs Numeric → Bar (aggregated mean)
+        # Categorical vs Numeric → Bar (mean aggregation)
         elif pd.api.types.is_object_dtype(df[x_col]) and pd.api.types.is_numeric_dtype(df[y_col]):
             mean_df = data.groupby(x_col)[y_col].mean().sort_values(ascending=False).head(20).reset_index()
-            mean_df.columns = [x_col, f"mean_{y_col}"]
-            return {"plot_type": "bar", "data": mean_df}
+            mean_df.columns = [x_col, f"Mean {y_col}"]
+            summary = f"`{x_col}` is categorical and `{y_col}` is numeric. Showing top 20 mean values."
+            return {"plot_type": "bar", "data": mean_df, "summary": summary}
 
-        # Datetime vs Numeric → Line
+        # Datetime vs Numeric → Line trend
         elif pd.api.types.is_datetime64_any_dtype(df[x_col]) and pd.api.types.is_numeric_dtype(df[y_col]):
             sorted_df = data.sort_values(by=x_col)
-            return {"plot_type": "line", "data": sorted_df}
+            summary = f"Trend of `{y_col}` over time (`{x_col}`)."
+            return {"plot_type": "line", "data": sorted_df, "summary": summary}
 
-        # Categorical vs Categorical → Grouped count
+        # Categorical vs Categorical → Grouped bar
         elif pd.api.types.is_object_dtype(df[x_col]) and pd.api.types.is_object_dtype(df[y_col]):
             cross = data.groupby([x_col, y_col]).size().unstack(fill_value=0)
-            return {"plot_type": "grouped_bar", "data": cross}
+            summary = f"Grouped frequency count between `{x_col}` and `{y_col}`."
+            return {"plot_type": "grouped_bar", "data": cross, "summary": summary}
 
         else:
-            return {"plot_type": "unsupported", "data": None}
+            return {"plot_type": "unsupported", "data": None, "summary": "Unsupported combination of column types."}
