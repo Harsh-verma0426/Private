@@ -7,7 +7,7 @@ import io, contextlib
 from Automated_EDA import EDA
 
 st.set_page_config(page_title="Automated EDA Tool", layout="wide")
-st.title("🤖 Automated EDA & Data Cleaning App")
+st.title("Automated EDA & Data Cleaning App")
 
 uploaded_file = st.file_uploader("Upload your dataset", type=["csv", "xlsx", "tsv"])
 
@@ -23,10 +23,10 @@ if uploaded_file:
         st.error("Unsupported file type.")
         st.stop()
 
-    st.success(f"✅ Successfully loaded {uploaded_file.name}")
+    st.success(f"Successfully loaded {uploaded_file.name}")
 
     # --- Data Overview ---
-    with st.expander("📊 Data Overview"):
+    with st.expander("Data Overview"):
         st.subheader("Dataset Information")
 
         # Create DataFrame similar to df.info() output
@@ -65,10 +65,10 @@ if uploaded_file:
         with contextlib.redirect_stdout(log_stream):
             df = EDA.data_type_conversion(df)
         st.text(log_stream.getvalue())
-        st.success("✅ Data type conversion complete!")
+        st.success("Data type conversion complete!")
 
     # --- Missing Value Summary ---
-    st.write("### ⚠️ Missing Value Summary")
+    st.write("###Missing Value Summary")
     null_counts = df.isnull().sum()
     st.dataframe(null_counts[null_counts > 0])
 
@@ -77,19 +77,57 @@ if uploaded_file:
         log_stream = io.StringIO()
         with contextlib.redirect_stdout(log_stream):
             df = EDA.fill_missing_values(df)
-        st.text_area("🧾 Cleaning Log", log_stream.getvalue(), height=300)
-        st.success("✅ Missing values filled successfully!")
+        st.text_area("Cleaning Log", log_stream.getvalue(), height=300)
+        st.success("Missing values filled successfully!")
 
     # --- Cleaned Output ---
-    st.write("### 🧾 Cleaned Data Sample")
+    st.write("### Cleaned Data Sample")
     st.dataframe(df.head(20))
 
     # --- Correlation Heatmap ---
-    st.write("### 📈 Correlation Heatmap")
-    corr_matrix = df.select_dtypes(include=np.number).corr()
-    fig, ax = plt.subplots(figsize=(10, 8))
-    sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap="coolwarm", square=True, ax=ax)
-    st.pyplot(fig)
+    st.write("### Correlation Heatmap")
+    with st.expander("MAP"):
+        corr_matrix = df.select_dtypes(include=np.number).corr()
+        fig, ax = plt.subplots(figsize=(10, 8))
+        sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap="coolwarm", square=True, ax=ax)
+        st.pyplot(fig)
+
+    # --- EDA Section ---
+    st.write("## 🔍 Exploratory Data Analysis")
+
+    # 1️⃣ Column selection
+    col = st.selectbox("Select a column to visualize", df.columns)
+
+    # 2️⃣ Sampling (for large datasets)
+    sample_df = df.sample(min(len(df), 10000), random_state=42)
+
+    # 3️⃣ Numeric column visualization
+    if pd.api.types.is_numeric_dtype(df[col]):
+        st.write(f"### 📊 Distribution of `{col}` (sample of {len(sample_df)} rows)")
+        fig, ax = plt.subplots(figsize=(8, 5))
+        sns.histplot(sample_df[col], bins=30, kde=True, ax=ax, color="skyblue")
+        st.pyplot(fig)
+
+        st.write("### 🧮 Boxplot (to see outliers)")
+        fig, ax = plt.subplots(figsize=(6, 3))
+        sns.boxplot(x=sample_df[col], color="orange", ax=ax)
+        st.pyplot(fig)
+
+    # 4️⃣ Categorical column visualization
+    elif pd.api.types.is_object_dtype(df[col]) or pd.api.types.is_categorical_dtype(df[col]):
+        st.write(f"### 📊 Frequency of top categories in `{col}`")
+        counts = sample_df[col].value_counts().head(20)
+        st.bar_chart(counts)
+
+    # 5️⃣ Datetime column visualization
+    elif pd.api.types.is_datetime64_any_dtype(df[col]):
+        st.write(f"### 🗓️ Trend over time for `{col}`")
+        df[col] = pd.to_datetime(df[col], errors='coerce')
+        date_counts = df[col].value_counts().sort_index()
+        st.line_chart(date_counts)
+
+    else:
+        st.warning("⚠️ This column type is not supported for visualization yet.")
 
     # --- Download ---
     csv = df.to_csv(index=False).encode('utf-8')
